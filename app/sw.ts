@@ -24,6 +24,7 @@ self.addEventListener("activate", (event: any) => {
           if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName)
           }
+          return null
         }),
       )
     }),
@@ -39,6 +40,26 @@ self.addEventListener("fetch", (event: any) => {
         return response
       }
       return fetch(event.request)
+        .then((response) => {
+          // Don't cache if not a valid response
+          if (!response || response.status !== 200 || response.type !== "basic") {
+            return response
+          }
+
+          // Clone the response since it can only be consumed once
+          const responseToCache = response.clone()
+
+          // Add the new response to cache
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache)
+          })
+
+          return response
+        })
+        .catch(() => {
+          // If fetch fails (offline), try to return a cached fallback
+          return caches.match("/")
+        })
     }),
   )
 })

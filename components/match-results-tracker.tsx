@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowDown, ArrowUp, Download, Minus, Upload } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/components/ui/use-toast"
+import { InstallButton } from "./install-button"
 
 type Player = {
   name: string
@@ -378,15 +379,18 @@ export function MatchResultsTracker() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end gap-2 mb-2">
-        <Button variant="outline" size="sm" onClick={exportData} className="flex items-center gap-1">
-          <Download className="h-4 w-4" />
-          <span className="sr-only sm:not-sr-only">Backup</span>
-        </Button>
-        <Button variant="outline" size="sm" onClick={importData} className="flex items-center gap-1">
-          <Upload className="h-4 w-4" />
-          <span className="sr-only sm:not-sr-only">Restore</span>
-        </Button>
+      <div className="flex justify-between items-center gap-2 mb-2">
+        <InstallButton />
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportData} className="flex items-center gap-1">
+            <Download className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Backup</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={importData} className="flex items-center gap-1">
+            <Upload className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Restore</span>
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
