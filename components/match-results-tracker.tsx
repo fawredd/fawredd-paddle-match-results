@@ -404,50 +404,50 @@ export function MatchResultsTracker() {
                 <CardTitle className="text-center">Set {setIndex + 1}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-5 gap-2 mb-2 text-center text-sm font-medium">
-                  <div>Player</div>
-                  <div>Won</div>
-                  <div>Lost</div>
-                  <div>Sum</div>
-                  <div>Team</div>
+                <div className="grid grid-cols-12 gap-2 mb-2 text-center text-sm font-medium">
+                  <div className="col-span-4">Player</div>
+                  <div className="col-span-2">Won</div>
+                  <div className="col-span-2">Lost</div>
+                  <div className="col-span-2">Sum</div>
+                  <div className="col-span-2">Team</div>
                 </div>
 
                 {/* First player row - editable */}
-                <div className="grid grid-cols-5 gap-2 mb-3 items-center bg-slate-50 p-2 rounded-md">
-                  <div>
+                <div className="grid grid-cols-12 gap-2 mb-3 items-center bg-slate-50 p-2 rounded-md">
+                  <div className="col-span-4">
                     <Input
                       type="text"
                       value={results.players[0].name}
                       onChange={(e) => handleNameChange(0, e.target.value)}
                       placeholder="Player 1"
-                      className="h-9 text-black bg-white"
-                      maxLength={20} // Prevent excessively long names
+                      className="h-9 text-black bg-white font-medium"
+                      maxLength={20}
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <Input
                       type="number"
                       min="0"
-                      max="99" // Reasonable limit for game scores
+                      max="99"
                       value={results.players[0].sets[setIndex].won.toString()}
                       onChange={(e) => handleFirstPlayerScoreChange(setIndex, "won", e.target.value)}
-                      className="h-9 text-center text-black bg-white"
+                      className="h-9 text-center text-black bg-white font-medium"
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <Input
                       type="number"
                       min="0"
-                      max="99" // Reasonable limit for game scores
+                      max="99"
                       value={results.players[0].sets[setIndex].lost.toString()}
                       onChange={(e) => handleFirstPlayerScoreChange(setIndex, "lost", e.target.value)}
-                      className="h-9 text-center text-black bg-white"
+                      className="h-9 text-center text-black bg-white font-medium"
                     />
                   </div>
-                  <div className="flex justify-center items-center">
+                  <div className="col-span-2 flex justify-center items-center">
                     <span className="text-lg font-semibold">{results.players[0].sets[setIndex].sum}</span>
                   </div>
-                  <div className="flex justify-center">
+                  <div className="col-span-2 flex justify-center">
                     <Checkbox
                       checked={results.players[0].sets[setIndex].team}
                       onCheckedChange={(checked) => handleTeamChange(0, setIndex, checked === true)}
@@ -460,27 +460,27 @@ export function MatchResultsTracker() {
                 {results.players.slice(1).map((player, idx) => {
                   const playerIndex = idx + 1
                   return (
-                    <div key={playerIndex} className="grid grid-cols-5 gap-2 mb-3 items-center">
-                      <div>
+                    <div key={playerIndex} className="grid grid-cols-12 gap-2 mb-3 items-center">
+                      <div className="col-span-4">
                         <Input
                           type="text"
                           value={player.name}
                           onChange={(e) => handleNameChange(playerIndex, e.target.value)}
                           placeholder={`Player ${playerIndex + 1}`}
-                          className="h-9 text-black bg-white"
-                          maxLength={20} // Prevent excessively long names
+                          className="h-9 text-black bg-white font-medium"
+                          maxLength={20}
                         />
                       </div>
-                      <div className="flex justify-center items-center">
-                        <span className="text-lg">{player.sets[setIndex].won}</span>
+                      <div className="col-span-2 flex justify-center items-center">
+                        <span className="text-lg font-medium">{player.sets[setIndex].won}</span>
                       </div>
-                      <div className="flex justify-center items-center">
-                        <span className="text-lg">{player.sets[setIndex].lost}</span>
+                      <div className="col-span-2 flex justify-center items-center">
+                        <span className="text-lg font-medium">{player.sets[setIndex].lost}</span>
                       </div>
-                      <div className="flex justify-center items-center">
+                      <div className="col-span-2 flex justify-center items-center">
                         <span className="text-lg font-semibold">{player.sets[setIndex].sum}</span>
                       </div>
-                      <div className="flex justify-center">
+                      <div className="col-span-2 flex justify-center">
                         <Checkbox
                           checked={player.sets[setIndex].team}
                           onCheckedChange={(checked) => handleTeamChange(playerIndex, setIndex, checked === true)}
@@ -517,7 +517,7 @@ export function MatchResultsTracker() {
               </div>
               {results.players.map((player, index) => (
                 <div key={index} className="grid grid-cols-2 gap-2 mb-3 items-center">
-                  <div className="font-medium">{player.name || `Player ${index + 1}`}</div>
+                  <div className="font-medium text-base">{player.name || `Player ${index + 1}`}</div>
                   <div className="text-center text-lg font-semibold">{player.total}</div>
                 </div>
               ))}
