@@ -87,7 +87,7 @@ export function InstallButton() {
   return (
     <Button variant="outline" size="sm" onClick={handleInstallClick} className="flex items-center gap-1">
       <Download className="h-4 w-4" />
-      <span className="sr-only sm:not-sr-only">Install</span>
+      <span>Install</span>
     </Button>
   )
 }

@@ -26,6 +26,7 @@ type MatchResults = {
   players: Player[]
   lastUpdated: number // Timestamp for data integrity
   version: string // For future compatibility
+  teamHistory: number[][][] // Track team combinations across sets
 }
 
 const APP_VERSION = "1.0.0"
@@ -72,6 +73,7 @@ const INITIAL_STATE: MatchResults = {
   ],
   lastUpdated: Date.now(),
   version: APP_VERSION,
+  teamHistory: [[], [], []], // One empty array for each set
 }
 
 // Helper function to sanitize input
@@ -97,10 +99,29 @@ const validateNumericInput = (value: string): number => {
   return num
 }
 
+// Helper function to check if two arrays have the same elements (regardless of order)
+const haveSameElements = (arr1: number[], arr2: number[]): boolean => {
+  if (arr1.length !== arr2.length) return false
+  const sorted1 = [...arr1].sort()
+  const sorted2 = [...arr2].sort()
+  return sorted1.every((val, idx) => val === sorted2[idx])
+}
+
 export function MatchResultsTracker() {
   const [results, setResults] = useState<MatchResults>(INITIAL_STATE)
   const [activeTab, setActiveTab] = useState("set1")
   const [isLoading, setIsLoading] = useState(true)
+  const [hasTie, setHasTie] = useState<{
+    hasWinnerTie: boolean
+    hasLoserTie: boolean
+    winnerTiedPlayers: string[]
+    loserTiedPlayers: string[]
+  }>({
+    hasWinnerTie: false,
+    hasLoserTie: false,
+    winnerTiedPlayers: [],
+    loserTiedPlayers: [],
+  })
 
   // Load data from localStorage on component mount with error handling
   useEffect(() => {
@@ -124,6 +145,21 @@ export function MatchResultsTracker() {
           }
           if (!parsedResults.lastUpdated) {
             parsedResults.lastUpdated = Date.now()
+          }
+          if (!parsedResults.teamHistory) {
+            // Initialize team history based on current team assignments
+            const teamHistory = [[], [], []]
+            for (let setIndex = 0; setIndex < 3; setIndex++) {
+              const teamMembers = parsedResults.players
+                .map((player, playerIndex) => ({ playerIndex, isTeam: player.sets[setIndex].team }))
+                .filter((item) => item.isTeam)
+                .map((item) => item.playerIndex)
+
+              if (teamMembers.length === 2) {
+                teamHistory[setIndex] = teamMembers
+              }
+            }
+            parsedResults.teamHistory = teamHistory
           }
 
           setResults(parsedResults)
@@ -167,6 +203,60 @@ export function MatchResultsTracker() {
     }
   }, [results, isLoading])
 
+  // Check for ties when results change
+  useEffect(() => {
+    if (isLoading) return
+
+    // Only check for ties if all players have names and teams are valid
+    if (!results.players.every((player) => player.name) || !areTeamsValid()) {
+      setHasTie({
+        hasWinnerTie: false,
+        hasLoserTie: false,
+        winnerTiedPlayers: [],
+        loserTiedPlayers: [],
+      })
+      return
+    }
+
+    // Create a copy of players with their indices for sorting
+    const playersWithIndices = results.players.map((player, index) => ({
+      ...player,
+      index,
+    }))
+
+    // Sort players by total in descending order (highest to lowest)
+    const sortedPlayers = [...playersWithIndices].sort((a, b) => b.total - a.total)
+
+    // Check for tie at the top (winners)
+    const hasWinnerTie = sortedPlayers[0].total === sortedPlayers[1].total
+    const winnerTiedPlayers = hasWinnerTie
+      ? sortedPlayers.filter((player) => player.total === sortedPlayers[0].total).map((player) => player.name)
+      : []
+
+    // Check for tie at the bottom (losers)
+    const hasLoserTie = sortedPlayers[2].total === sortedPlayers[3].total
+    const loserTiedPlayers = hasLoserTie
+      ? sortedPlayers.filter((player) => player.total === sortedPlayers[3].total).map((player) => player.name)
+      : []
+
+    // Update tie state
+    setHasTie({
+      hasWinnerTie,
+      hasLoserTie,
+      winnerTiedPlayers,
+      loserTiedPlayers,
+    })
+
+    // Log for debugging
+    console.log("Tie check:", {
+      hasWinnerTie,
+      hasLoserTie,
+      winnerTiedPlayers,
+      loserTiedPlayers,
+      sortedPlayers: sortedPlayers.map((p) => ({ name: p.name, total: p.total })),
+    })
+  }, [results, isLoading])
+
   const handleNameChange = (index: number, name: string) => {
     const sanitizedName = sanitizeInput(name)
     const newResults = { ...results }
@@ -174,9 +264,75 @@ export function MatchResultsTracker() {
     setResults(newResults)
   }
 
-  const handleTeamChange = (playerIndex: number, setIndex: number, isTeam: boolean) => {
+  const handleTeamChange = (playerIndex: number, setIndex: number, isChecked: boolean) => {
     const newResults = { ...results }
-    newResults.players[playerIndex].sets[setIndex].team = isTeam
+
+    // If unchecking, just update and recalculate
+    if (!isChecked) {
+      // Update the team status
+      newResults.players[playerIndex].sets[setIndex].team = false
+
+      // Update team history
+      newResults.teamHistory[setIndex] = newResults.teamHistory[setIndex].filter((idx) => idx !== playerIndex)
+
+      // Auto-calculate scores based on team assignments
+      calculateScores(newResults, setIndex)
+
+      // Recalculate totals for all players
+      recalculateTotals(newResults)
+
+      setResults(newResults)
+      return
+    }
+
+    // Count how many teams are already checked in this set
+    const currentTeamCount = newResults.players.filter(
+      (player, idx) => idx !== playerIndex && player.sets[setIndex].team,
+    ).length
+
+    // If trying to check a third checkbox, prevent it
+    if (currentTeamCount >= 2) {
+      toast({
+        title: "Team limit reached",
+        description: "Only 2 players can be on a team. Uncheck one player first.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // If this is the second player being checked, we need to check for team repetition
+    if (currentTeamCount === 1) {
+      // Find the other player who is already checked
+      const otherPlayerIndex = newResults.players.findIndex(
+        (player, idx) => idx !== playerIndex && player.sets[setIndex].team,
+      )
+
+      // Create the potential new team
+      const newTeam = [playerIndex, otherPlayerIndex].sort()
+
+      // Check if this team combination has been used in previous sets
+      for (let i = 0; i < setIndex; i++) {
+        const previousTeam = newResults.teamHistory[i]
+        if (previousTeam.length === 2 && haveSameElements(previousTeam, newTeam)) {
+          toast({
+            title: "Team already used",
+            description:
+              "This team combination has already been used in a previous set. Please select different players.",
+            variant: "destructive",
+          })
+          return
+        }
+      }
+
+      // Update team history for this set
+      newResults.teamHistory[setIndex] = newTeam
+    } else if (currentTeamCount === 0) {
+      // This is the first player being checked for this set
+      newResults.teamHistory[setIndex] = [playerIndex]
+    }
+
+    // Update the team status
+    newResults.players[playerIndex].sets[setIndex].team = true
 
     // Auto-calculate scores based on team assignments
     calculateScores(newResults, setIndex)
@@ -189,7 +345,9 @@ export function MatchResultsTracker() {
 
   const handleFirstPlayerScoreChange = (setIndex: number, field: "won" | "lost", value: string) => {
     const newResults = { ...results }
-    const numValue = validateNumericInput(value)
+
+    // Clear the input value first to avoid concatenation issues on mobile
+    const numValue = value === "" ? 0 : Number.parseInt(value.replace(/^0+/, ""), 10) || 0
 
     // Update first player's score
     newResults.players[0].sets[setIndex][field] = numValue
@@ -209,6 +367,20 @@ export function MatchResultsTracker() {
   }
 
   const calculateScores = (results: MatchResults, setIndex: number) => {
+    // Count team assignments for this set
+    const teamCount = results.players.filter((player) => player.sets[setIndex].team).length
+
+    // Only calculate scores if exactly 2 players are on a team
+    if (teamCount !== 2) {
+      // Reset scores for all players except the first one
+      for (let i = 1; i < results.players.length; i++) {
+        results.players[i].sets[setIndex].won = 0
+        results.players[i].sets[setIndex].lost = 0
+        results.players[i].sets[setIndex].sum = 0
+      }
+      return
+    }
+
     const firstPlayer = results.players[0]
     const firstPlayerWon = firstPlayer.sets[setIndex].won
     const firstPlayerLost = firstPlayer.sets[setIndex].lost
@@ -320,6 +492,22 @@ export function MatchResultsTracker() {
             importedData.version = APP_VERSION
             importedData.lastUpdated = Date.now()
 
+            // Initialize team history if it doesn't exist
+            if (!importedData.teamHistory) {
+              const teamHistory = [[], [], []]
+              for (let setIndex = 0; setIndex < 3; setIndex++) {
+                const teamMembers = importedData.players
+                  .map((player, playerIndex) => ({ playerIndex, isTeam: player.sets[setIndex].team }))
+                  .filter((item) => item.isTeam)
+                  .map((item) => item.playerIndex)
+
+                if (teamMembers.length === 2) {
+                  teamHistory[setIndex] = teamMembers
+                }
+              }
+              importedData.teamHistory = teamHistory
+            }
+
             setResults(importedData)
             localStorage.setItem(STORAGE_KEY, JSON.stringify(importedData))
 
@@ -357,6 +545,7 @@ export function MatchResultsTracker() {
       return null
     }
 
+    // Sort players by total in descending order (highest to lowest)
     const sortedPlayers = [...results.players].sort((a, b) => b.total - a.total)
 
     return {
@@ -368,6 +557,17 @@ export function MatchResultsTracker() {
   }
 
   const rankings = getPlayerRankings()
+
+  // Check if exactly 2 team checkboxes are checked for each set
+  const areTeamsValid = () => {
+    for (let setIndex = 0; setIndex < 3; setIndex++) {
+      const teamCount = results.players.filter((player) => player.sets[setIndex].team).length
+      if (teamCount !== 2) {
+        return false
+      }
+    }
+    return true
+  }
 
   if (isLoading) {
     return (
@@ -384,11 +584,11 @@ export function MatchResultsTracker() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={exportData} className="flex items-center gap-1">
             <Download className="h-4 w-4" />
-            <span className="sr-only sm:not-sr-only">Backup</span>
+            <span>Backup</span>
           </Button>
           <Button variant="outline" size="sm" onClick={importData} className="flex items-center gap-1">
             <Upload className="h-4 w-4" />
-            <span className="sr-only sm:not-sr-only">Restore</span>
+            <span>Restore</span>
           </Button>
         </div>
       </div>
@@ -430,22 +630,30 @@ export function MatchResultsTracker() {
                   </div>
                   <div className="col-span-2">
                     <Input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={results.players[0].sets[setIndex].won.toString()}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={
+                        results.players[0].sets[setIndex].won === 0
+                          ? ""
+                          : results.players[0].sets[setIndex].won.toString()
+                      }
                       onChange={(e) => handleFirstPlayerScoreChange(setIndex, "won", e.target.value)}
                       className="h-9 text-center text-black bg-white font-medium"
+                      placeholder="0"
                     />
                   </div>
                   <div className="col-span-2">
                     <Input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={results.players[0].sets[setIndex].lost.toString()}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={
+                        results.players[0].sets[setIndex].lost === 0
+                          ? ""
+                          : results.players[0].sets[setIndex].lost.toString()
+                      }
                       onChange={(e) => handleFirstPlayerScoreChange(setIndex, "lost", e.target.value)}
                       className="h-9 text-center text-black bg-white font-medium"
+                      placeholder="0"
                     />
                   </div>
                   <div className="col-span-2 flex justify-center items-center">
@@ -495,13 +703,26 @@ export function MatchResultsTracker() {
                   )
                 })}
 
+                {/* Team selection status */}
+                <div className="mt-4 p-2 rounded-md bg-slate-100">
+                  <p className="text-sm font-medium">
+                    Team Status: {results.players.filter((p) => p.sets[setIndex].team).length} of 2 selected
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {results.players.filter((p) => p.sets[setIndex].team).length === 2
+                      ? "✓ Teams are properly set"
+                      : "⚠️ Exactly 2 players must be on a team"}
+                  </p>
+                </div>
+
                 <div className="mt-4 text-sm text-muted-foreground">
                   <p>Instructions:</p>
                   <ol className="list-decimal pl-5 space-y-1 mt-1">
                     <li>Enter all player names</li>
-                    <li>Check the team checkbox for players on the same team</li>
+                    <li>Check the team checkbox for exactly 2 players</li>
                     <li>Enter won/lost games for Player 1 only</li>
                     <li>Other players' scores will be calculated automatically</li>
+                    <li>The same team combination cannot be repeated across sets</li>
                   </ol>
                 </div>
               </CardContent>
@@ -515,48 +736,92 @@ export function MatchResultsTracker() {
               <CardTitle className="text-center">Final Results</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-2 mb-4 text-center text-sm font-medium">
-                <div>Player</div>
-                <div>Total</div>
-              </div>
-              {results.players.map((player, index) => (
-                <div key={index} className="grid grid-cols-2 gap-2 mb-3 items-center">
-                  <div className="font-medium text-base">{player.name || `Player ${index + 1}`}</div>
-                  <div className="text-center text-lg font-semibold">{player.total}</div>
-                </div>
-              ))}
-
-              {rankings && (
-                <Alert className="mt-6">
+              {!areTeamsValid() ? (
+                <Alert variant="destructive" className="mb-4">
                   <AlertDescription>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <ArrowUp className="text-green-500" />
-                        <span>
-                          <strong>{rankings.moveUp.name}</strong> moves up
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Minus className="text-gray-500" />
-                        <span>
-                          <strong>{rankings.stayOne.name}</strong> stays
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Minus className="text-gray-500" />
-                        <span>
-                          <strong>{rankings.stayTwo.name}</strong> stays
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <ArrowDown className="text-red-500" />
-                        <span>
-                          <strong>{rankings.moveDown.name}</strong> moves down
-                        </span>
-                      </div>
-                    </div>
+                    Please select exactly 2 players for each team in all sets to see results.
                   </AlertDescription>
                 </Alert>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2 mb-4 text-center text-sm font-medium">
+                    <div>Player</div>
+                    <div>Total</div>
+                  </div>
+
+                  {/* Display players sorted by total in descending order */}
+                  {results.players
+                    .slice()
+                    .sort((a, b) => b.total - a.total)
+                    .map((player, index) => (
+                      <div key={index} className="grid grid-cols-2 gap-2 mb-3 items-center">
+                        <div className="font-medium text-base">{player.name || `Player ${index + 1}`}</div>
+                        <div className="text-center text-lg font-semibold">{player.total}</div>
+                      </div>
+                    ))}
+
+                  {/* Tiebreaker alerts */}
+                  {(hasTie.hasWinnerTie || hasTie.hasLoserTie) && (
+                    <Alert className="mt-6 bg-yellow-50 border-yellow-200">
+                      <AlertDescription>
+                        <div className="space-y-2">
+                          <p className="font-bold">Tiebreaker Needed!</p>
+
+                          {hasTie.hasWinnerTie && (
+                            <div className="mb-2">
+                              <p className="font-medium">Winner Tie:</p>
+                              <p>
+                                There is a tie for the winner position between: {hasTie.winnerTiedPlayers.join(", ")}
+                              </p>
+                              <p className="text-sm mt-1">Please play one more set to determine the winner.</p>
+                            </div>
+                          )}
+
+                          {hasTie.hasLoserTie && (
+                            <div>
+                              <p className="font-medium">Loser Tie:</p>
+                              <p>There is a tie for the loser position between: {hasTie.loserTiedPlayers.join(", ")}</p>
+                              <p className="text-sm mt-1">Please play one more set to determine the loser.</p>
+                            </div>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {rankings && !hasTie.hasWinnerTie && !hasTie.hasLoserTie && (
+                    <Alert className="mt-6">
+                      <AlertDescription>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <ArrowUp className="text-green-500" />
+                            <span>
+                              <strong>{rankings.moveUp.name}</strong> moves up
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Minus className="text-gray-500" />
+                            <span>
+                              <strong>{rankings.stayOne.name}</strong> stays
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Minus className="text-gray-500" />
+                            <span>
+                              <strong>{rankings.stayTwo.name}</strong> stays
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ArrowDown className="text-red-500" />
+                            <span>
+                              <strong>{rankings.moveDown.name}</strong> moves down
+                            </span>
+                          </div>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
               )}
 
               <div className="mt-6">
