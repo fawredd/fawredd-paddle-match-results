@@ -148,7 +148,7 @@ export function MatchResultsTracker() {
           }
           if (!parsedResults.teamHistory) {
             // Initialize team history based on current team assignments
-            const teamHistory = [[], [], []]
+            const teamHistory: number[][][] = [[], [], []]
             for (let setIndex = 0; setIndex < 3; setIndex++) {
               const teamMembers = parsedResults.players
                 .map((player, playerIndex) => ({ playerIndex, isTeam: player.sets[setIndex].team }))
@@ -156,7 +156,7 @@ export function MatchResultsTracker() {
                 .map((item) => item.playerIndex)
 
               if (teamMembers.length === 2) {
-                teamHistory[setIndex] = teamMembers
+                teamHistory[setIndex] = [teamMembers]
               }
             }
             parsedResults.teamHistory = teamHistory
@@ -266,7 +266,6 @@ export function MatchResultsTracker() {
 
   const handleTeamChange = (playerIndex: number, setIndex: number, isChecked: boolean) => {
     const newResults = { ...results }
-
     // If unchecking, just update and recalculate
     if (!isChecked) {
       // Update the team status
@@ -310,17 +309,19 @@ export function MatchResultsTracker() {
       // Create the potential new team
       const newTeam = [playerIndex, otherPlayerIndex].sort()
 
-      // Check if this team combination has been used in previous sets
-      for (let i = 0; i < setIndex; i++) {
-        const previousTeam = newResults.teamHistory[i]
-        if (previousTeam.length === 2 && haveSameElements(previousTeam, newTeam)) {
-          toast({
-            title: "Team already used",
-            description:
-              "This team combination has already been used in a previous set. Please select different players.",
-            variant: "destructive",
-          })
-          return
+      // Check if this team combination has been used in previous sets -- THIS NEEDS TO BE FIXED. ALL SETS SHOULD BE CHECKED NOT PREVIOUS ONLY.
+      for (let i = 0; i < 3; i++) {
+        if (i !== setIndex){
+          const previousTeam = newResults.teamHistory[i]
+          if (previousTeam.length === 2 && haveSameElements(previousTeam, newTeam)) {
+            toast({
+              title: "Team already used",
+              description:
+                "This team combination has already been used in a previous set. Please select different players.",
+              variant: "destructive",
+            })
+            return
+          }
         }
       }
 
