@@ -1,5 +1,5 @@
 import { MatchResultsTracker } from "@/components/match-results-tracker"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "sonner"
 import Image from "next/image"
 
 export default function Home() {

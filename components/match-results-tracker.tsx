@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowDown, ArrowUp, Download, Minus, Upload } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { InstallButton } from "./install-button"
 
 type Player = {
@@ -35,7 +35,7 @@ const STORAGE_KEY = "paddleMatchResults"
 const INITIAL_STATE: MatchResults = {
   players: [
     {
-      name: "",
+      name: "Player1",
       sets: [
         { won: 0, lost: 0, sum: 0, team: false },
         { won: 0, lost: 0, sum: 0, team: false },
@@ -44,7 +44,7 @@ const INITIAL_STATE: MatchResults = {
       total: 0,
     },
     {
-      name: "",
+      name: "Player2",
       sets: [
         { won: 0, lost: 0, sum: 0, team: false },
         { won: 0, lost: 0, sum: 0, team: false },
@@ -53,7 +53,7 @@ const INITIAL_STATE: MatchResults = {
       total: 0,
     },
     {
-      name: "",
+      name: "Player3",
       sets: [
         { won: 0, lost: 0, sum: 0, team: false },
         { won: 0, lost: 0, sum: 0, team: false },
@@ -62,7 +62,7 @@ const INITIAL_STATE: MatchResults = {
       total: 0,
     },
     {
-      name: "",
+      name: "Player4",
       sets: [
         { won: 0, lost: 0, sum: 0, team: false },
         { won: 0, lost: 0, sum: 0, team: false },
@@ -171,10 +171,8 @@ export function MatchResultsTracker() {
       }
     } catch (error) {
       console.error("Error loading data from localStorage:", error)
-      toast({
-        title: "Error loading saved data",
+      toast.error("Error loading saved data",{
         description: "Your previous match data couldn't be loaded. Starting with fresh data.",
-        variant: "destructive",
       })
       setResults(INITIAL_STATE)
     } finally {
@@ -195,10 +193,8 @@ export function MatchResultsTracker() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedResults))
     } catch (error) {
       console.error("Error saving data to localStorage:", error)
-      toast({
-        title: "Error saving data",
+      toast.error("Error saving data",{
         description: "Your match data couldn't be saved to local storage.",
-        variant: "destructive",
       })
     }
   }, [results, isLoading])
@@ -291,10 +287,8 @@ export function MatchResultsTracker() {
 
     // If trying to check a third checkbox, prevent it
     if (currentTeamCount >= 2) {
-      toast({
-        title: "Team limit reached",
+      toast.error("Team limit reached",{
         description: "Only 2 players can be on a team. Uncheck one player first.",
-        variant: "destructive",
       })
       return
     }
@@ -314,11 +308,9 @@ export function MatchResultsTracker() {
         if (i !== setIndex){
           const previousTeam = newResults.teamHistory[i]
           if (previousTeam.length === 2 && haveSameElements(previousTeam, newTeam)) {
-            toast({
-              title: "Team already used",
+            toast.warning("Team already used",{
               description:
                 "This team combination has already been used in a previous set. Please select different players.",
-              variant: "destructive",
             })
             return
           }
@@ -418,127 +410,19 @@ export function MatchResultsTracker() {
       setResults(INITIAL_STATE)
       try {
         localStorage.removeItem(STORAGE_KEY)
-        toast({
-          title: "Data reset successful",
+        setResults(INITIAL_STATE)
+        toast.success("Data reset successful",{
           description: "All match data has been cleared.",
         })
       } catch (error) {
         console.error("Error clearing localStorage:", error)
-        toast({
-          title: "Error clearing data",
+        toast.error("Error clearing data",{
           description: "There was a problem clearing your data.",
-          variant: "destructive",
         })
       }
     }
   }
 
-  // Export data to a file
-  const exportData = () => {
-    try {
-      const dataStr = JSON.stringify(results, null, 2)
-      const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`
-
-      const exportFileDefaultName = `paddle-match-results-${new Date().toISOString().slice(0, 10)}.json`
-
-      const linkElement = document.createElement("a")
-      linkElement.setAttribute("href", dataUri)
-      linkElement.setAttribute("download", exportFileDefaultName)
-      linkElement.click()
-
-      toast({
-        title: "Export successful",
-        description: "Your match data has been exported to a file.",
-      })
-    } catch (error) {
-      console.error("Error exporting data:", error)
-      toast({
-        title: "Export failed",
-        description: "There was a problem exporting your data.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Import data from a file
-  const importData = () => {
-    try {
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = ".json"
-
-      input.onchange = (e: Event) => {
-        const target = e.target as HTMLInputElement
-        if (!target.files?.length) return
-
-        const file = target.files[0]
-        const reader = new FileReader()
-
-        reader.onload = (event) => {
-          try {
-            const content = event.target?.result as string
-            const importedData = JSON.parse(content) as MatchResults
-
-            // Validate imported data
-            if (
-              !importedData ||
-              !importedData.players ||
-              !Array.isArray(importedData.players) ||
-              importedData.players.length !== 4
-            ) {
-              throw new Error("Invalid data format")
-            }
-
-            // Update with current version and timestamp
-            importedData.version = APP_VERSION
-            importedData.lastUpdated = Date.now()
-
-            // Initialize team history if it doesn't exist
-            if (!importedData.teamHistory) {
-              const teamHistory = [[], [], []]
-              for (let setIndex = 0; setIndex < 3; setIndex++) {
-                const teamMembers = importedData.players
-                  .map((player, playerIndex) => ({ playerIndex, isTeam: player.sets[setIndex].team }))
-                  .filter((item) => item.isTeam)
-                  .map((item) => item.playerIndex)
-
-                if (teamMembers.length === 2) {
-                  teamHistory[setIndex] = teamMembers
-                }
-              }
-              importedData.teamHistory = teamHistory
-            }
-
-            setResults(importedData)
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(importedData))
-
-            toast({
-              title: "Import successful",
-              description: "Your match data has been imported.",
-            })
-          } catch (error) {
-            console.error("Error parsing imported file:", error)
-            toast({
-              title: "Import failed",
-              description: "The selected file contains invalid data.",
-              variant: "destructive",
-            })
-          }
-        }
-
-        reader.readAsText(file)
-      }
-
-      input.click()
-    } catch (error) {
-      console.error("Error importing data:", error)
-      toast({
-        title: "Import failed",
-        description: "There was a problem importing your data.",
-        variant: "destructive",
-      })
-    }
-  }
 
   // Determine player rankings
   const getPlayerRankings = () => {
@@ -582,16 +466,6 @@ export function MatchResultsTracker() {
     <div className="space-y-6">
       <div className="flex justify-between items-center gap-2 mb-2">
         <InstallButton />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportData} className="flex items-center gap-1">
-            <Download className="h-4 w-4" />
-            <span>Backup</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={importData} className="flex items-center gap-1">
-            <Upload className="h-4 w-4" />
-            <span>Restore</span>
-          </Button>
-        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -676,6 +550,7 @@ export function MatchResultsTracker() {
                     <div key={playerIndex} className="grid grid-cols-12 gap-2 mb-3 items-center">
                       <div className="col-span-4">
                         <Input
+                          key={`InputPlayer${playerIndex + 1}`}
                           type="text"
                           value={player.name}
                           onChange={(e) => handleNameChange(playerIndex, e.target.value)}
@@ -722,7 +597,7 @@ export function MatchResultsTracker() {
                     <li>Enter all player names</li>
                     <li>Check the team checkbox for exactly 2 players</li>
                     <li>Enter won/lost games for Player 1 only</li>
-                    <li>Other players' scores will be calculated automatically</li>
+                    <li>Other players{`\'`} scores will be calculated automatically</li>
                     <li>The same team combination cannot be repeated across sets</li>
                   </ol>
                 </div>
@@ -755,7 +630,7 @@ export function MatchResultsTracker() {
                     .slice()
                     .sort((a, b) => b.total - a.total)
                     .map((player, index) => (
-                      <div key={index} className="grid grid-cols-2 gap-2 mb-3 items-center">
+                      <div key={`result${index}`} className="grid grid-cols-2 gap-2 mb-3 items-center">
                         <div className="font-medium text-base">{player.name || `Player ${index + 1}`}</div>
                         <div className="text-center text-lg font-semibold">{player.total}</div>
                       </div>
@@ -789,7 +664,15 @@ export function MatchResultsTracker() {
                       </AlertDescription>
                     </Alert>
                   )}
-
+                  {!rankings && (
+                    <Alert className="mt-6" variant={"destructive"}>
+                      <AlertDescription>
+                        <p className="text-sm">
+                          Please ensure all players have names and teams are properly set in all sets to see rankings.
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {rankings && !hasTie.hasWinnerTie && !hasTie.hasLoserTie && (
                     <Alert className="mt-6">
                       <AlertDescription>
@@ -821,6 +704,7 @@ export function MatchResultsTracker() {
                         </div>
                       </AlertDescription>
                     </Alert>
+                    
                   )}
                 </>
               )}
