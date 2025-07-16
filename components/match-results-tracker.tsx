@@ -467,7 +467,7 @@ export function MatchResultsTracker() {
     <div className="space-y-6">
       <div className="flex justify-between items-center gap-2 mb-2">
         <InstallButton />
-        <ShareButton url={`https://v0-paddle-match-results-vercel.app`}/>
+        <ShareButton url={`https://v0-paddle-match-results.vercel.app/`}/>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
