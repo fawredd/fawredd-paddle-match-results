@@ -1,15 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowDown, ArrowUp, Download, Minus, Upload } from "lucide-react"
+import { ArrowDown, ArrowUp, Minus, Share } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { toast } from "@/components/ui/use-toast"
 import { InstallButton } from "./install-button"
+import ShareButton from "@/components/share-button"
 
 type Player = {
   name: string
@@ -107,6 +108,7 @@ const haveSameElements = (arr1: number[], arr2: number[]): boolean => {
   return sorted1.every((val, idx) => val === sorted2[idx])
 }
 
+// The actual Component
 export function MatchResultsTracker() {
   const [results, setResults] = useState<MatchResults>(INITIAL_STATE)
   const [activeTab, setActiveTab] = useState("set1")
@@ -171,11 +173,7 @@ export function MatchResultsTracker() {
       }
     } catch (error) {
       console.error("Error loading data from localStorage:", error)
-      toast({
-        title: "Error loading saved data",
-        description: "Your previous match data couldn't be loaded. Starting with fresh data.",
-        variant: "destructive",
-      })
+      toast.error("Error loading saved data")
       setResults(INITIAL_STATE)
     } finally {
       setIsLoading(false)
@@ -195,11 +193,7 @@ export function MatchResultsTracker() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedResults))
     } catch (error) {
       console.error("Error saving data to localStorage:", error)
-      toast({
-        title: "Error saving data",
-        description: "Your match data couldn't be saved to local storage.",
-        variant: "destructive",
-      })
+      toast.error("Error saving data")
     }
   }, [results, isLoading])
 
@@ -272,7 +266,7 @@ export function MatchResultsTracker() {
       newResults.players[playerIndex].sets[setIndex].team = false
 
       // Update team history
-      newResults.teamHistory[setIndex] = newResults.teamHistory[setIndex].filter((idx) => idx !== playerIndex)
+      newResults.teamHistory[setIndex] = newResults.teamHistory[setIndex].filter((idx) => idx[0] !== playerIndex)
 
       // Auto-calculate scores based on team assignments
       calculateScores(newResults, setIndex)
@@ -291,10 +285,8 @@ export function MatchResultsTracker() {
 
     // If trying to check a third checkbox, prevent it
     if (currentTeamCount >= 2) {
-      toast({
-        title: "Team limit reached",
-        description: "Only 2 players can be on a team. Uncheck one player first.",
-        variant: "destructive",
+      toast("Team limit reached",{
+        description: "Only 2 players can be on a team. Uncheck one player first."
       })
       return
     }
@@ -314,11 +306,9 @@ export function MatchResultsTracker() {
         if (i !== setIndex){
           const previousTeam = newResults.teamHistory[i]
           if (previousTeam.length === 2 && haveSameElements(previousTeam, newTeam)) {
-            toast({
-              title: "Team already used",
+            toast.error("Team already used",{
               description:
-                "This team combination has already been used in a previous set. Please select different players.",
-              variant: "destructive",
+                "This team combination has already been used other set. Please select different players.",
             })
             return
           }
@@ -418,125 +408,14 @@ export function MatchResultsTracker() {
       setResults(INITIAL_STATE)
       try {
         localStorage.removeItem(STORAGE_KEY)
-        toast({
-          title: "Data reset successful",
-          description: "All match data has been cleared.",
-        })
+        toast.success("Data reset successful")
+
       } catch (error) {
         console.error("Error clearing localStorage:", error)
-        toast({
-          title: "Error clearing data",
-          description: "There was a problem clearing your data.",
-          variant: "destructive",
+        toast.error("Error clearing data",{
+          description: "There was a problem clearing your data."
         })
       }
-    }
-  }
-
-  // Export data to a file
-  const exportData = () => {
-    try {
-      const dataStr = JSON.stringify(results, null, 2)
-      const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`
-
-      const exportFileDefaultName = `paddle-match-results-${new Date().toISOString().slice(0, 10)}.json`
-
-      const linkElement = document.createElement("a")
-      linkElement.setAttribute("href", dataUri)
-      linkElement.setAttribute("download", exportFileDefaultName)
-      linkElement.click()
-
-      toast({
-        title: "Export successful",
-        description: "Your match data has been exported to a file.",
-      })
-    } catch (error) {
-      console.error("Error exporting data:", error)
-      toast({
-        title: "Export failed",
-        description: "There was a problem exporting your data.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Import data from a file
-  const importData = () => {
-    try {
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = ".json"
-
-      input.onchange = (e: Event) => {
-        const target = e.target as HTMLInputElement
-        if (!target.files?.length) return
-
-        const file = target.files[0]
-        const reader = new FileReader()
-
-        reader.onload = (event) => {
-          try {
-            const content = event.target?.result as string
-            const importedData = JSON.parse(content) as MatchResults
-
-            // Validate imported data
-            if (
-              !importedData ||
-              !importedData.players ||
-              !Array.isArray(importedData.players) ||
-              importedData.players.length !== 4
-            ) {
-              throw new Error("Invalid data format")
-            }
-
-            // Update with current version and timestamp
-            importedData.version = APP_VERSION
-            importedData.lastUpdated = Date.now()
-
-            // Initialize team history if it doesn't exist
-            if (!importedData.teamHistory) {
-              const teamHistory = [[], [], []]
-              for (let setIndex = 0; setIndex < 3; setIndex++) {
-                const teamMembers = importedData.players
-                  .map((player, playerIndex) => ({ playerIndex, isTeam: player.sets[setIndex].team }))
-                  .filter((item) => item.isTeam)
-                  .map((item) => item.playerIndex)
-
-                if (teamMembers.length === 2) {
-                  teamHistory[setIndex] = teamMembers
-                }
-              }
-              importedData.teamHistory = teamHistory
-            }
-
-            setResults(importedData)
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(importedData))
-
-            toast({
-              title: "Import successful",
-              description: "Your match data has been imported.",
-            })
-          } catch (error) {
-            console.error("Error parsing imported file:", error)
-            toast({
-              title: "Import failed",
-              description: "The selected file contains invalid data.",
-              variant: "destructive",
-            })
-          }
-        }
-
-        reader.readAsText(file)
-      }
-
-      input.click()
-    } catch (error) {
-      console.error("Error importing data:", error)
-      toast({
-        title: "Import failed",
-        description: "There was a problem importing your data.",
-        variant: "destructive",
-      })
     }
   }
 
@@ -582,16 +461,7 @@ export function MatchResultsTracker() {
     <div className="space-y-6">
       <div className="flex justify-between items-center gap-2 mb-2">
         <InstallButton />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportData} className="flex items-center gap-1">
-            <Download className="h-4 w-4" />
-            <span>Backup</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={importData} className="flex items-center gap-1">
-            <Upload className="h-4 w-4" />
-            <span>Restore</span>
-          </Button>
-        </div>
+        <ShareButton url="" text="Share" />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -621,6 +491,7 @@ export function MatchResultsTracker() {
                 <div className="grid grid-cols-12 gap-2 mb-3 items-center bg-slate-50 p-2 rounded-md">
                   <div className="col-span-4">
                     <Input
+                      key={`set${setIndex + 1}name1`}
                       type="text"
                       value={results.players[0].name}
                       onChange={(e) => handleNameChange(0, e.target.value)}
@@ -631,6 +502,7 @@ export function MatchResultsTracker() {
                   </div>
                   <div className="col-span-2">
                     <Input
+                      key={`set${setIndex + 1}won1`}
                       inputMode="numeric"
                       pattern="[0-9]*"
                       value={
@@ -645,6 +517,7 @@ export function MatchResultsTracker() {
                   </div>
                   <div className="col-span-2">
                     <Input
+                    key={`set${setIndex + 1}lost1`}
                       inputMode="numeric"
                       pattern="[0-9]*"
                       value={
@@ -676,6 +549,7 @@ export function MatchResultsTracker() {
                     <div key={playerIndex} className="grid grid-cols-12 gap-2 mb-3 items-center">
                       <div className="col-span-4">
                         <Input
+                          key={`set${setIndex + 1}name${playerIndex + 1}`}
                           type="text"
                           value={player.name}
                           onChange={(e) => handleNameChange(playerIndex, e.target.value)}
@@ -722,7 +596,7 @@ export function MatchResultsTracker() {
                     <li>Enter all player names</li>
                     <li>Check the team checkbox for exactly 2 players</li>
                     <li>Enter won/lost games for Player 1 only</li>
-                    <li>Other players' scores will be calculated automatically</li>
+                    <li>Other players\' scores will be calculated automatically</li>
                     <li>The same team combination cannot be repeated across sets</li>
                   </ol>
                 </div>

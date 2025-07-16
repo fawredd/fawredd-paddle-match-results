@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 
 export function InstallButton() {
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -27,10 +27,7 @@ export function InstallButton() {
       // Clear the stored prompt
       setInstallPrompt(null)
       // Show a success message
-      toast({
-        title: "App installed",
-        description: "The app has been successfully installed on your device.",
-      })
+      toast.success("The app has been successfully installed on your device.")
     }
 
     // Add event listeners
@@ -52,9 +49,8 @@ export function InstallButton() {
   const handleInstallClick = async () => {
     if (!installPrompt) {
       // If no install prompt is available, provide instructions
-      toast({
-        title: "Installation",
-        description: "To install this app, use your browser's 'Add to Home Screen' or 'Install' option.",
+      toast("Installation",{
+        description: "To install this app, use your browser's 'Add to Home Screen' or 'Install' option."
       })
       return
     }
@@ -71,10 +67,7 @@ export function InstallButton() {
 
     // Log the outcome
     if (choiceResult.outcome === "accepted") {
-      toast({
-        title: "Thank you!",
-        description: "The app is being installed on your device.",
-      })
+      toast.success("The app is being installed on your device.")
     } else {
       // The user declined, but we'll still hide the button
       console.log("User dismissed the install prompt")
