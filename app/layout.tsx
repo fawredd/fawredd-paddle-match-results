@@ -20,7 +20,10 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Paddle Match",
   },
-   generator: 'fawredd'
+   generator: 'fawredd',
+   verification:{
+    google: process.env.GOOGLE_SITE_VERIFICATION,
+   }
 }
 
 export const viewport: Viewport = {

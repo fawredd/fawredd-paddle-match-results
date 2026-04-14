@@ -1,45 +1,50 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
 import { toast } from "sonner"
 
+// BeforeInstallPromptEvent no está en los tipos DOM estándar de TS
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
+}
+
+function useIsIOS() {
+  // iOS Safari nunca dispara beforeinstallprompt — necesita instrucciones manuales
+  if (typeof navigator === "undefined") return false
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream
+}
+
 export function InstallButton() {
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null)
   const [isInstallable, setIsInstallable] = useState(false)
+  const isIOS = useIsIOS()
 
   useEffect(() => {
-    // Store the install prompt event when it's fired
+    // Ya está instalada como PWA standalone — no mostrar botón
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as any).standalone === true // iOS Safari standalone check
+
+    if (isStandalone) return
+
     const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the default browser install prompt
       e.preventDefault()
-      // Store the event for later use
-      setInstallPrompt(e)
-      // Show our install button
+      installPromptRef.current = e as BeforeInstallPromptEvent
       setIsInstallable(true)
     }
 
-    // Check if the app is already installed
     const handleAppInstalled = () => {
-      // Hide the install button
+      installPromptRef.current = null
       setIsInstallable(false)
-      // Clear the stored prompt
-      setInstallPrompt(null)
-      // Show a success message
-      toast("App installed")
+      toast.success("App installed successfully")
     }
 
-    // Add event listeners
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
     window.addEventListener("appinstalled", handleAppInstalled)
 
-    // Check if the app is in standalone mode (already installed)
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setIsInstallable(false)
-    }
-
-    // Clean up event listeners
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
       window.removeEventListener("appinstalled", handleAppInstalled)
@@ -47,42 +52,49 @@ export function InstallButton() {
   }, [])
 
   const handleInstallClick = async () => {
-    if (!installPrompt) {
-      // If no install prompt is available, provide instructions
-      toast("Installation",{
-        description: "To install this app, use your browser's 'Add to Home Screen' or 'Install' option.",
-      })
+    if (!installPromptRef.current) {
+      // Fallback: instrucciones manuales (iOS u otros browsers sin soporte)
+      const message = isIOS
+        ? 'Tap the Share button (□↑) then "Add to Home Screen"'
+        : "Use your browser's menu → 'Install app' or 'Add to Home Screen'"
+
+      toast("Add to Desktop", { description: message })
       return
     }
 
-    // Show the install prompt
-    installPrompt.prompt()
+    try {
+      await installPromptRef.current.prompt()
+      const { outcome } = await installPromptRef.current.userChoice
 
-    // Wait for the user to respond to the prompt
-    const choiceResult = await installPrompt.userChoice
+      if (outcome === "accepted") {
+        toast.success("Installing app…")
+        // appinstalled event se encarga del cleanup
+      }
+      // Si dismissed: NO tocar isInstallable — el browser puede re-disparar beforeinstallprompt
+      // Solo limpiar la ref del prompt consumido
+      installPromptRef.current = null
 
-    // Hide the install button regardless of outcome
-    setInstallPrompt(null)
-    setIsInstallable(false)
-
-    // Log the outcome
-    if (choiceResult.outcome === "accepted") {
-      toast("Thank you!",{
-        description: "The app is being installed on your device.",
-      })
-    } else {
-      // The user declined, but we'll still hide the button
-      console.log("User dismissed the install prompt")
+      if (outcome === "dismissed") {
+        setIsInstallable(false) // ocultamos por ahora, se re-activa si el browser re-dispara
+      }
+    } catch (err) {
+      console.error("Install prompt error:", err)
+      toast.error("Could not start installation")
     }
   }
 
-  // Only show the button if the app is installable
-  if (!isInstallable) return null
+  // Mostrar en iOS aunque no haya prompt nativo (para dar instrucciones)
+  if (!isInstallable && !isIOS) return null
 
   return (
-    <Button variant="outline" size="sm" onClick={handleInstallClick} className="flex items-center gap-1">
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleInstallClick}
+      className="flex items-center gap-1"
+    >
       <Download className="h-4 w-4" />
-      <span>Install</span>
+      <span>Add to Desktop</span>
     </Button>
   )
 }
